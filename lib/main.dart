@@ -36,16 +36,37 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   /// 실습용 가짜 대화 — API를 붙이기 전까지 이 목록으로 화면을 만든다.
-  final List<ChatMessage> _messages = const [
+  final List<ChatMessage> _messages = [
     ChatMessage(text: '오늘 뭐 배워?', isUser: true),
     ChatMessage(text: 'AI 챗봇에 움직이는 응답을 붙입니다.', isUser: false),
     ChatMessage(text: '타이핑 점은 왜 필요해요?', isUser: true),
     ChatMessage(text: '응답이 1초를 넘으면 앱이 멈춘 것처럼 보이기 때문입니다.', isUser: false),
   ];
 
+  final _controller = TextEditingController();
+
+  void _send() {
+    final text = _controller.text.trim();
+
+    if (text.isEmpty) return;
+
+    setState(() {
+      _messages.add(ChatMessage(text: text, isUser: true));
+    });
+
+    _controller.clear();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       // TODO 5 — 키보드가 입력창을 가리지 않게
       // TIP: Scaffold의 resizeToAvoidBottomInset은 기본값이 true다.
       //      body를 SafeArea로 감싸 홈 인디케이터와 노치를 피한다.
@@ -59,17 +80,19 @@ class _ChatPageState extends State<ChatPage> {
             //    · reverse:true면 index 0이 화면 맨 아래(최신)다.
             //    · 그래서 _messages[length - 1 - i]로 거꾸로 꺼낸다.
             // ─────────────────────────────────────────────────────────
+
             Expanded(
-              child: ListView.builder(
-                reverse: true,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: _messages.length,
-                itemBuilder: (context, index) {
-                  final message =
-                      _messages[_messages.length - 1 - index];
-                  return _Bubble(message: message);
-                },
-              ),
+              child: _messages.isEmpty
+                  ? const Center(child: Text('무엇이든 물어보세요'))
+                  : ListView.builder(
+                      reverse: true,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _messages[_messages.length - 1 - index];
+                        return _Bubble(message: message);
+                      },
+                    ),
             ),
 
             // ─────────────────────────────────────────────────────────
@@ -90,7 +113,29 @@ class _ChatPageState extends State<ChatPage> {
             //  · 보낼 때 _controller.clear() 하고 setState로 목록에 추가한다.
             //  · dispose()에서 _controller.dispose()를 잊지 않는다.
             // ─────────────────────────────────────────────────────────
-            const _TodoBar(label: 'TODO 3 — 여기에 입력창을 만든다'),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      decoration: const InputDecoration(
+                        hintText: '메시지를 입력하세요',
+                        border: OutlineInputBorder(),
+                      ),
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    icon: const Icon(Icons.send),
+                    onPressed: _send,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -118,6 +163,7 @@ class _ChatPageState extends State<ChatPage> {
 ///  · 색은 Theme.of(context).colorScheme에서 꺼내면 다크 모드에서도 안전하다.
 ///  · 긴 글은 자동으로 줄바꿈된다. maxWidth만 잡아 주면 된다.
 /// ───────────────────────────────────────────────────────────────
+
 class _Bubble extends StatelessWidget {
   const _Bubble({required this.message});
 
@@ -125,10 +171,23 @@ class _Bubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Text(message.text),
+    final isUser = message.isUser;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        constraints: const BoxConstraints(maxWidth: 420),
+        decoration: BoxDecoration(
+          color: isUser
+              ? colorScheme.primaryContainer
+              : colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(message.text),
+      ),
     );
   }
 }
@@ -152,12 +211,7 @@ class _TodoBar extends StatelessWidget {
         children: [
           const Icon(Icons.edit_outlined, size: 18),
           const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 13),
-            ),
-          ),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
         ],
       ),
     );
