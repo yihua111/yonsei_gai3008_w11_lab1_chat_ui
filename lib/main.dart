@@ -45,16 +45,95 @@ class _ChatPageState extends State<ChatPage> {
 
   final _controller = TextEditingController();
 
-  void _send() {
-    final text = _controller.text.trim();
+  String? _error;
+  String? _lastFailedText;
+  bool _sending = false;
+  int _retryCount = 0;
 
+  Future<void> _send() async {
+    if (_sending) return;
+
+    final text = _controller.text.trim();
     if (text.isEmpty) return;
 
     setState(() {
       _messages.add(ChatMessage(text: text, isUser: true));
+      _sending = true;
+      _error = null;
+      _retryCount = 0;
+      _lastFailedText = null;
     });
 
     _controller.clear();
+
+    await _requestReply(text);
+  }
+
+  Future<void> _requestReply(String text) async {
+    try {
+      await Future.delayed(const Duration(seconds: 1));
+
+      if (text.contains('401')) {
+        throw 401;
+      } else if (text.contains('429')) {
+        throw 429;
+      } else if (text.contains('500')) {
+        throw 500;
+      } else if (text.contains('timeout')) {
+        throw 408;
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _messages.add(ChatMessage(text: '메시지를 받았습니다: $text', isUser: false));
+        _error = null;
+        _lastFailedText = null;
+        _sending = false;
+        _retryCount = 0;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      String msg;
+
+      if (e == 401) {
+        msg = '키/권한을 확인해 주세요';
+      } else if (e == 429) {
+        msg = '잠시 후 다시 시도해 주세요';
+      } else if (e == 500) {
+        msg = '응답을 받지 못했습니다';
+      } else {
+        msg = '네트워크를 확인해 주세요';
+      }
+
+      setState(() {
+        _error = msg;
+        _lastFailedText = text;
+        _sending = false;
+      });
+    }
+  }
+
+  Future<void> _retry() async {
+    if (_sending || _lastFailedText == null) return;
+
+    final text = _lastFailedText!;
+
+    setState(() {
+      _sending = true;
+      _error = null;
+      _retryCount++;
+    });
+
+    if (text.contains('429')) {
+      final seconds = _retryCount == 1 ? 1 : 2;
+      await Future.delayed(Duration(seconds: seconds));
+    }
+
+    if (!mounted) return;
+
+    await _requestReply(text);
   }
 
   @override
@@ -93,6 +172,41 @@ class _ChatPageState extends State<ChatPage> {
                         return _Bubble(message: message);
                       },
                     ),
+            ),
+
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: _sending
+                  ? const Padding(
+                      key: ValueKey('loading'),
+                      padding: EdgeInsets.all(12),
+                      child: Text('응답을 기다리는 중...'),
+                    )
+                  : _error != null
+                  ? Container(
+                      key: const ValueKey('error'),
+                      margin: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _retry,
+                            child: const Text('다시 시도'),
+                          ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox(key: ValueKey('idle')),
             ),
 
             // ─────────────────────────────────────────────────────────
